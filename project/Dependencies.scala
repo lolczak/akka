@@ -47,6 +47,7 @@ object Dependencies {
     // Cluster Sample
     val sigar       = "org.fusesource"                   % "sigar"                        % "1.6.4"            // ApacheV2
 
+    val commonsNet    = "commons-net"                 % "commons-net"                   % "3.3"                // Apache commons net
     // Test
 
     object Test {
@@ -125,7 +126,7 @@ object Dependencies {
 
   val clusterSample = Seq(Test.scalatest, sigar)
 
-  val contrib = Seq(Test.junitIntf, Test.commonsIo)
+  val contrib = Seq(commonsNet, Test.junitIntf, Test.commonsIo)
 
   val multiNodeSample = Seq(Test.scalatest)
 }
