@@ -1,7 +1,8 @@
 package akka.contrib.cluster.topology
 
-import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.{Matchers, WordSpec}
+import org.scalatest.prop.Tables.Table
+import org.scalatest.prop.TableDrivenPropertyChecks._
 import akka.actor.Address
 
 /**
@@ -9,24 +10,17 @@ import akka.actor.Address
  *
  * @author Lukasz Olczak
  */
-class NetMaskClassifierSpec extends WordSpec with Matchers {
-
+class RegExClassifierSpec extends WordSpec with Matchers {
   val matchingAddresses = Table(
-    ("net:192.168.0.0/16", "192.168.1.1"),
-    ("net:192.168.0.0/16", "192.168.1.2"),
-    ("net:192.168.0.0/8", "192.167.1.1"),
-    ("net:192.168.0.0/24", "192.168.0.1"),
-    ("net:192.168.0.0/1", "193.168.1.1"),
-    ("net:192.168.0.0/1", "213.168.1.1"),
-    ("net:192.168.0.0/1", "221.168.1.1"),
-    ("net:192.168.0.0/1", "199.168.1.1")
+    ("reg-ex:[a-z]*dev\\.domain\\.org", "node1.dev.domain.org"),
+    ("reg-ex:.*\\.org", "some.domain.org"),
+    ("reg-ex:node[0-9]\\.domain\\.org", "node1.domain.org")
   )
 
   val nonMatchingAddresses = Table(
-    ("net:192.168.0.0/16", "192.161.1.1"),
-    ("net:192.168.0.0/16", "92.168.1.2"),
-    ("net:192.168.0.0/8", "122.167.1.1"),
-    ("net:192.168.0.0/24", "192.168.1.1")
+    ("reg-ex:[a-z]*dev\\.domain\\.org", "node1.dev.domain.org.pl"),
+    ("reg-ex:.*\\.org", "some.domain.com"),
+    ("reg-ex:node[0-9]\\.domain\\.org", "node11.domain.org")
   )
 
   "A NetMaskClassifier " must {
@@ -48,5 +42,4 @@ class NetMaskClassifierSpec extends WordSpec with Matchers {
     }
 
   }
-
 }

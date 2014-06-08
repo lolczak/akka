@@ -21,6 +21,7 @@ class AddressClassifierSpec extends WordSpec with Matchers {
     "regEx:edfrgrbr",
     "REG-EX:edfrgrbr",
     "192.168.0.0/24",
+    "net:192.168.0.0/16net:",
     "[a-z]*dev.some.org"
   )
 
@@ -33,12 +34,9 @@ class AddressClassifierSpec extends WordSpec with Matchers {
     "net:192.168.0.0/1")
 
   val validRegExPatterns = Table(
-    "reg-ex:[a-z]*dev.domain.org",
-    "reg-ex:[a-z]*.1.datacenter1.domain.org",
-    "reg-ex:[a-z]*dev.some.org",
-    "reg-ex:[a-z]*dev.some.org",
-    "reg-ex:[a-z]*dev.some.org",
-    "reg-ex:[a-z]*dev.some.org")
+    "reg-ex:[a-z]*dev\\.domain\\.org",
+    "reg-ex:[a-z]*\\.1\\.datacenter1\\.domain\\.org",
+    "reg-ex:[a-z]*dev\\.some\\.org")
 
   "An AddressClassifier" must {
 

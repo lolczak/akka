@@ -10,14 +10,14 @@ import org.apache.commons.net.util.SubnetUtils
  */
 object AddressClassifier {
 
-  val NetMaskPrefix = "net:"
+  val NetMaskPattern = """^net:([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2})$""".r
 
-  val RegExPrefix = "reg-ex:"
+  val RegExPattern = """^reg-ex:(.+)$""".r
 
   def fromString(pattern: String): AddressClassifier = {
     pattern match {
-      case netMakPattern if netMakPattern.startsWith(NetMaskPrefix) => NetMaskClassifier(pattern.substring(NetMaskPrefix.length))
-      case regExPattern if regExPattern.startsWith(RegExPrefix) => RegExClassifier(pattern.substring(RegExPrefix.length))
+      case NetMaskPattern(netmask) => NetMaskClassifier(netmask)
+      case RegExPattern(regEx) => RegExClassifier(regEx)
       case _ => throw new IllegalArgumentException(s"address pattern $pattern is not valid")
     }
   }
@@ -26,14 +26,19 @@ object AddressClassifier {
 
 case class NetMaskClassifier(pattern: String) extends AddressClassifier {
 
-  private val cidrNotation = new SubnetUtils(pattern).getInfo
+  private val cidrPattern = new SubnetUtils(pattern).getInfo
 
-  def apply(address: Address): Boolean = cidrNotation.isInRange(address.host.getOrElse(throw new IllegalArgumentException()))
+  def apply(address: Address): Boolean = cidrPattern.isInRange(address.host.getOrElse(throw new IllegalArgumentException()))
 
 }
 
 case class RegExClassifier(pattern: String) extends AddressClassifier {
+  
+  private val regExPattern = pattern.r
 
-  def apply(address: Address): Boolean = ???
+  def apply(address: Address): Boolean = address.host.getOrElse(throw new IllegalArgumentException()) match {
+    case regExPattern() => true
+    case _ => false
+  }
 
 }
