@@ -10,19 +10,17 @@ import akka.japi.Util._
  */
 object ClusterTopologySettings {
 
-  def fromConfig(config: Config): ClusterTopologySettings = {
+  def fromConfig(config: Config): ClusterTopology = {
     val zonesConfig = immutableSeq(config.getConfigList("cluster.topology.zones"))
     val zones = for (zoneConfig <- zonesConfig)
-    yield ZoneSettings(
+    yield Zone(
         id = zoneConfig.getString("id"),
-        nodeClassifier = zoneConfig.getString("node-classifier"),
+        addressClassifier = AddressClassifier.fromString(zoneConfig.getString("zone-classifier")),
         proximity = immutableSeq(zoneConfig.getStringList("proximity-list")))
-    ClusterTopologySettings(zones)
+
+    zones.map(zone => zone.id -> zone).toMap
   }
 
 }
 
 
-case class ClusterTopologySettings(zones: Seq[ZoneSettings])
-
-case class ZoneSettings(id: String, nodeClassifier: String, proximity: Seq[String])

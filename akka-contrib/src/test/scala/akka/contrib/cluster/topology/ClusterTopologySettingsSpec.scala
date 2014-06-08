@@ -10,13 +10,42 @@ import com.typesafe.config.ConfigFactory
  */
 class ClusterTopologySettingsSpec extends FlatSpec with Matchers with GivenWhenThen {
 
+  val topologyConfig =
+    """
+      |akka {
+      |    cluster {
+      |        topology {
+      |            zones = [{
+      |                id = "1"
+      |                zone-classifier = "net:213.168.0.0/8"
+      |                proximity-list = [3,2]
+      |            },
+      |            {
+      |                id = "2"
+      |                zone-classifier = "net:213.169.0.0/8"
+      |                proximity-list = [1,3]
+      |            },
+      |            {
+      |                id = "3"
+      |                zone-classifier = "net:213.170.0.0/8"
+      |                proximity-list = [1,2]
+      |            }
+      |            ]
+      |        }
+      |    }
+      |}
+    """.stripMargin
+
   "A ClusterTopologySettings" should "parse topology configuration" in {
     Given("Valid config containing topology")
-    val config = ConfigFactory.parseURL(Thread.currentThread().getContextClassLoader().getResource("topology.conf"))
+    val config = ConfigFactory.parseString(topologyConfig)
     When("I parse topology config")
-    val clusterTopologySettings = ClusterTopologySettings.fromConfig(config.getConfig("akka"))
+    val clusterTopology = ClusterTopologySettings.fromConfig(config.getConfig("akka"))
     Then("I should get valid topology settings")
-    clusterTopologySettings shouldNot be(null)
+    clusterTopology shouldNot be(null)
+    clusterTopology.contains("1") should be(true)
+    clusterTopology.contains("2") should be(true)
+    clusterTopology.contains("3") should be(true)
   }
 
 }

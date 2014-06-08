@@ -2,35 +2,36 @@ package akka.contrib.cluster.topology
 
 import akka.routing._
 import scala.collection.immutable.IndexedSeq
-import akka.actor.Address
+import akka.actor.{ActorSystem, Address}
 import akka.routing.ActorRefRoutee
 import akka.routing.ActorSelectionRoutee
+import akka.cluster.Cluster
 
 /**
  *
  *
  * @author Lukasz Olczak
  */
-trait TopologyAwareRoutingLogic extends RoutingLogic {
+abstract class TopologyAwareRoutingLogic(cluster: Cluster) extends RoutingLogic {
 
-  val myZone: Zone
+  protected val topology: ClusterTopology = ClusterTopologySettings.fromConfig(cluster.system.settings.config)
 
-  val zones: IndexedSeq[Zone]
+  protected val zones: IndexedSeq[Zone] = topology.values.toIndexedSeq
+
+  protected val myZone: Zone = {
+    val myZoneOption = zones.find(_.contains(cluster.selfAddress))
+    if (myZoneOption.isEmpty) throw new IllegalArgumentException("Wrong topology. Cannot identify my zone.")
+    myZoneOption.get
+  }
 
   /**
-   * Pick the destination for a given message. Normally it picks one of the
-   * passed `routees`, but in the end it is up to the implementation to
-   * return whatever [[akka.routing.Routee]] to use for sending a specific message.
-   *
-   * When implemented from Java it can be good to know that
-   * `routees.apply(index)` can be used to get an element
-   * from the `IndexedSeq`.
+   * @inheritdoc
    */
   def select(message: Any, routees: IndexedSeq[Routee]): Routee = {
-    val topology: Map[Zone, IndexedSeq[Routee]] = routees groupBy routeeZone
+    val routeesTopology: Map[Zone, IndexedSeq[Routee]] = routees groupBy routeeZone
     val destinations = for (
-      zone <- selectZones(message, myZone, zones);
-      zoneRoutees = topology.get(zone).get;
+      zone <- selectZones(message, myZone, topology);
+      zoneRoutees = routeesTopology.get(zone).get;
       routees <- selectRoutees(message, zone, zoneRoutees)
     ) yield routees
     SeveralRoutees(destinations)
@@ -51,7 +52,7 @@ trait TopologyAwareRoutingLogic extends RoutingLogic {
     }
   }
 
-  protected def selectZones(message: Any, myZone: Zone, availableZones: IndexedSeq[Zone]): IndexedSeq[Zone]
+  protected def selectZones(message: Any, myZone: Zone, topology: ClusterTopology): IndexedSeq[Zone]
 
   protected def selectRoutees(message: Any, zone: Zone, routees: IndexedSeq[Routee]): IndexedSeq[Routee]
 

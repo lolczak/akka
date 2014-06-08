@@ -22,21 +22,27 @@ object AddressClassifier {
     }
   }
 
+  def throwHostMissing = throw new IllegalArgumentException("Cannot classify address: host missing")
+
 }
 
 case class NetMaskClassifier(pattern: String) extends AddressClassifier {
 
+  import AddressClassifier._
+
   private val cidrPattern = new SubnetUtils(pattern).getInfo
 
-  def apply(address: Address): Boolean = cidrPattern.isInRange(address.host.getOrElse(throw new IllegalArgumentException()))
+  def apply(address: Address): Boolean = cidrPattern.isInRange(address.host.getOrElse(throwHostMissing))
 
 }
 
 case class RegExClassifier(pattern: String) extends AddressClassifier {
-  
+
+  import AddressClassifier._
+
   private val regExPattern = pattern.r
 
-  def apply(address: Address): Boolean = address.host.getOrElse(throw new IllegalArgumentException()) match {
+  def apply(address: Address): Boolean = address.host.getOrElse(throwHostMissing) match {
     case regExPattern() => true
     case _ => false
   }
