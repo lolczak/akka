@@ -1,6 +1,6 @@
 package akka.contrib.cluster.topology
 
-import akka.routing.{Routee, RoundRobinRoutingLogic, RoutingLogic}
+import akka.routing.{ Routee, RoundRobinRoutingLogic, RoutingLogic }
 import akka.cluster.Cluster
 import scala.collection.immutable.IndexedSeq
 

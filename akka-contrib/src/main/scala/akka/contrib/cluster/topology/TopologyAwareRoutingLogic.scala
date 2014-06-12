@@ -2,7 +2,7 @@ package akka.contrib.cluster.topology
 
 import akka.routing._
 import scala.collection.immutable.IndexedSeq
-import akka.actor.{ActorSystem, Address}
+import akka.actor.{ ActorSystem, Address }
 import akka.routing.ActorRefRoutee
 import akka.routing.ActorSelectionRoutee
 import akka.cluster.Cluster
@@ -30,9 +30,9 @@ abstract class TopologyAwareRoutingLogic(cluster: Cluster) extends RoutingLogic 
   def select(message: Any, routees: IndexedSeq[Routee]): Routee = {
     val routeesTopology: Map[Zone, IndexedSeq[Routee]] = routees groupBy routeeZone
     val destinations = for (
-      zone <- selectZones(message, myZone, topology);
+      zone ← selectZones(message, myZone, topology);
       zoneRoutees = routeesTopology.get(zone).get;
-      routees <- selectRoutees(message, zone, zoneRoutees)
+      routees ← selectRoutees(message, zone, zoneRoutees)
     ) yield routees
     SeveralRoutees(destinations)
   }
@@ -46,9 +46,9 @@ abstract class TopologyAwareRoutingLogic(cluster: Cluster) extends RoutingLogic 
 
   protected def extractNodeAddress(routee: Routee): Address = {
     routee match {
-      case asr: ActorSelectionRoutee => asr.selection.anchorPath.address
-      case arr: ActorRefRoutee => arr.ref.path.address
-      case _ => throw new IllegalArgumentException(s"Cannot extract address from routee")
+      case asr: ActorSelectionRoutee ⇒ asr.selection.anchorPath.address
+      case arr: ActorRefRoutee       ⇒ arr.ref.path.address
+      case _                         ⇒ throw new IllegalArgumentException(s"Cannot extract address from routee")
     }
   }
 

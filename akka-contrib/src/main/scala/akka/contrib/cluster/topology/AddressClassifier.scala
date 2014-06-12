@@ -16,9 +16,9 @@ object AddressClassifier {
 
   def fromString(pattern: String): AddressClassifier = {
     pattern match {
-      case NetMaskPattern(netmask) => NetMaskClassifier(netmask)
-      case RegExPattern(regEx) => RegExClassifier(regEx)
-      case _ => throw new IllegalArgumentException(s"address pattern $pattern is not valid")
+      case NetMaskPattern(netmask) ⇒ NetMaskClassifier(netmask)
+      case RegExPattern(regEx)     ⇒ RegExClassifier(regEx)
+      case _                       ⇒ throw new IllegalArgumentException(s"address pattern $pattern is not valid")
     }
   }
 
@@ -43,8 +43,8 @@ case class RegExClassifier(pattern: String) extends AddressClassifier {
   private val regExPattern = pattern.r
 
   def apply(address: Address): Boolean = address.host.getOrElse(throwHostMissing) match {
-    case regExPattern() => true
-    case _ => false
+    case regExPattern() ⇒ true
+    case _              ⇒ false
   }
 
 }

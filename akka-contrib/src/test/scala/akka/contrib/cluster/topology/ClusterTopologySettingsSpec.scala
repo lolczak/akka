@@ -1,6 +1,6 @@
 package akka.contrib.cluster.topology
 
-import org.scalatest.{GivenWhenThen, Matchers, FlatSpec}
+import org.scalatest.{ GivenWhenThen, Matchers, FlatSpec }
 import com.typesafe.config.ConfigFactory
 
 /**

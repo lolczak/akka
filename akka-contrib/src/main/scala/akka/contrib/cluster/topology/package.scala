@@ -11,6 +11,6 @@ package object topology {
 
   type ClusterTopology = Map[String, Zone]
 
-  type AddressClassifier = Address => Boolean
+  type AddressClassifier = Address ⇒ Boolean
 
 }

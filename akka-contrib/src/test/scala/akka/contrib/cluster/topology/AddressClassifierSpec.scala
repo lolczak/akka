@@ -1,6 +1,6 @@
 package akka.contrib.cluster.topology
 
-import org.scalatest.{Matchers, WordSpec}
+import org.scalatest.{ Matchers, WordSpec }
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
 /**
@@ -22,8 +22,7 @@ class AddressClassifierSpec extends WordSpec with Matchers {
     "REG-EX:edfrgrbr",
     "192.168.0.0/24",
     "net:192.168.0.0/16net:",
-    "[a-z]*dev.some.org"
-  )
+    "[a-z]*dev.some.org")
 
   val validNetMaskPatterns = Table(
     "net:192.168.0.0/16",
@@ -42,7 +41,7 @@ class AddressClassifierSpec extends WordSpec with Matchers {
 
     "throw exception upon malformed address pattern" in {
       forAll(invalidPatterns) {
-        pattern =>
+        pattern ⇒
           intercept[IllegalArgumentException] {
             AddressClassifier.fromString(pattern)
           }
@@ -51,7 +50,7 @@ class AddressClassifierSpec extends WordSpec with Matchers {
 
     "support parsing netmask pattern" in {
       forAll(validNetMaskPatterns) {
-        pattern =>
+        pattern ⇒
           val addressClassifier = AddressClassifier.fromString(pattern)
           addressClassifier shouldNot be(null)
       }
@@ -59,7 +58,7 @@ class AddressClassifierSpec extends WordSpec with Matchers {
 
     "support parsing reg ex pattern" in {
       forAll(validRegExPatterns) {
-        pattern =>
+        pattern ⇒
           val addressClassifier = AddressClassifier.fromString(pattern)
           addressClassifier shouldNot be(null)
       }
