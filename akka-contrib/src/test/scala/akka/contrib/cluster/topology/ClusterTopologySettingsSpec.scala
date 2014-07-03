@@ -40,7 +40,7 @@ class ClusterTopologySettingsSpec extends FlatSpec with Matchers with GivenWhenT
     Given("Valid config containing topology")
     val config = ConfigFactory.parseString(topologyConfig)
     When("I parse topology config")
-    val clusterTopology = ClusterTopologySettings.fromConfig(config.getConfig("akka"))
+    val clusterTopology = ClusterTopology.fromConfig(config.getConfig("akka"))
     Then("I should get valid topology settings")
     clusterTopology shouldNot be(null)
     clusterTopology.contains("1") should be(true)

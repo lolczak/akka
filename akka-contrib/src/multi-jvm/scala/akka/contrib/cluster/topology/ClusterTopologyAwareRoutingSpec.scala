@@ -124,6 +124,7 @@ class ClusterTopologyAwareRoutingSpec extends MultiNodeSpec(ClusterTopologyAware
 
     "startup cluster" in within(30 seconds) {
       //      awaitClusterUp(roles: _*)
+      println("test§1")
       join(zone1.node2, zone1.node1)
       join(zone2.node1, zone1.node1)
       join(zone2.node2, zone1.node1)

@@ -9,8 +9,6 @@ import akka.actor.Address
  */
 package object topology {
 
-  type ClusterTopology = Map[String, Zone]
-
   type AddressClassifier = Address ⇒ Boolean
 
 }
