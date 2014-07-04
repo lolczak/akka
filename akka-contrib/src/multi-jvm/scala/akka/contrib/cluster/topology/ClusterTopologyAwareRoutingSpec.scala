@@ -18,6 +18,8 @@ import akka.pattern.ask
  */
 object ClusterTopologyAwareRoutingSpec extends MultiNodeConfig {
 
+  val MessageCount = 10
+
   class Echo extends Actor {
     def receive = {
       case msg ⇒ {
@@ -69,6 +71,15 @@ object ClusterTopologyAwareRoutingSpec extends MultiNodeConfig {
         |           allow-local-routees = on
         |         }
         |       }
+        |       /router2 {
+        |         router = topology-aware-group
+        |         zone-routing-logic = closest-zone
+        |         node-routing-logic = broadcast
+        |         nr-of-instances = 10
+        |         routees.paths = [ "/user/service" ]
+        |         cluster.enabled = on
+        |         cluster.allow-local-routees = on
+        |       }
         |     }
         |   }
         |   remote {
@@ -101,7 +112,7 @@ object ClusterTopologyAwareRoutingSpec extends MultiNodeConfig {
         |       {
         |         id = "3"
         |         zone-classifier = "net:127.3.0.1/16"
-        |         proximity-list = [1,2]
+        |         proximity-list = [2,1]
         |       }
         |       ]
         |     }
@@ -130,10 +141,15 @@ object ClusterTopologyAwareRoutingSpec extends MultiNodeConfig {
 }
 
 class ClusterTopologyAwareRoutingMultiJvmZone1Node1 extends ClusterTopologyAwareRoutingSpec
+
 class ClusterTopologyAwareRoutingMultiJvmZone1Node2 extends ClusterTopologyAwareRoutingSpec
+
 class ClusterTopologyAwareRoutingMultiJvmZone2Node1 extends ClusterTopologyAwareRoutingSpec
+
 class ClusterTopologyAwareRoutingMultiJvmZone2Node2 extends ClusterTopologyAwareRoutingSpec
+
 class ClusterTopologyAwareRoutingMultiJvmZone3Node1 extends ClusterTopologyAwareRoutingSpec
+
 class ClusterTopologyAwareRoutingMultiJvmZone3Node2 extends ClusterTopologyAwareRoutingSpec
 
 class ClusterTopologyAwareRoutingSpec extends MultiNodeSpec(ClusterTopologyAwareRoutingSpec)
@@ -145,6 +161,8 @@ class ClusterTopologyAwareRoutingSpec extends MultiNodeSpec(ClusterTopologyAware
   override def initialParticipants = roles.size
 
   lazy val router1 = system.actorOf(FromConfig.props(Props[Echo]), "router1")
+
+  lazy val router2 = system.actorOf(FromConfig.props(), "router2")
 
   def join(from: RoleName, to: RoleName): Unit = {
     runOn(from) {
@@ -159,7 +177,9 @@ class ClusterTopologyAwareRoutingSpec extends MultiNodeSpec(ClusterTopologyAware
       memberProbe.expectMsgType[MemberUp](15.seconds).member.address should be(node(nodes.head).address)
     }
     runOn(nodes.head) {
-      memberProbe.receiveN(nodes.size, 15.seconds).collect { case MemberUp(m) ⇒ m.address }.toSet should be(
+      memberProbe.receiveN(nodes.size, 15.seconds).collect {
+        case MemberUp(m) ⇒ m.address
+      }.toSet should be(
         nodes.map(node(_).address).toSet)
     }
     enterBarrier(nodes.head.name + "-up")
@@ -169,7 +189,7 @@ class ClusterTopologyAwareRoutingSpec extends MultiNodeSpec(ClusterTopologyAware
 
   def receiveReplies(expectedReplies: Int): Map[Address, Int] = {
     val zero = Map.empty[Address, Int] ++ roles.map(address(_) -> 0)
-    (receiveWhile(5 seconds, messages = expectedReplies) {
+    (receiveWhile(15 seconds, messages = expectedReplies) {
       case Reply(address) ⇒ address
     }).foldLeft(zero) {
       case (replyMap, address) ⇒ replyMap + (address -> (replyMap(address) + 1))
@@ -207,14 +227,33 @@ class ClusterTopologyAwareRoutingSpec extends MultiNodeSpec(ClusterTopologyAware
 
         awaitAssert(currentRoutees(router1).size should be(6))
 
-        (1 to 10).foreach(i ⇒ router1 ! s"hit $i")
+        (1 to MessageCount).foreach(i ⇒ router1 ! s"hit $i")
 
-        val replies = receiveReplies(10)
+        val replies = receiveReplies(MessageCount)
         replies(zone1.node1) should be(0)
         replies(zone1.node2) should be(0)
         replies(zone2.node1) should be(0)
         replies(zone2.node2) should be(0)
-        replies(zone3.node1) + replies(zone3.node2) should be(10)
+        replies(zone3.node1) + replies(zone3.node2) should be(MessageCount)
+      }
+      enterBarrier("after-2")
+    }
+
+    "lookup routees on the member nodes in the cluster" taggedAs LongRunningTest in {
+      system.actorOf(Props(classOf[Echo]), "service")
+      enterBarrier("service-started")
+      runOn(zone3.node2) {
+        awaitAssert(currentRoutees(router2).size should be(6))
+
+        (1 to MessageCount).foreach(i ⇒ router2 ! s"hit $i")
+
+        val replies = receiveReplies(2 * MessageCount)
+        replies(zone1.node1) should be(0)
+        replies(zone1.node2) should be(0)
+        replies(zone2.node1) should be(MessageCount)
+        replies(zone2.node2) should be(MessageCount)
+        replies(zone3.node1) should be(0)
+        replies(zone3.node2) should be(0)
       }
       enterBarrier("after-2")
     }
