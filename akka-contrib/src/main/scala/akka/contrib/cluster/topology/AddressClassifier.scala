@@ -32,7 +32,10 @@ case class NetMaskClassifier(pattern: String) extends AddressClassifier {
 
   private val cidrPattern = new SubnetUtils(pattern).getInfo
 
-  def apply(address: Address): Boolean = cidrPattern.isInRange(address.host.getOrElse(throwHostMissing))
+  def apply(address: Address): Boolean = {
+    println(s"Classifiing $address")
+    cidrPattern.isInRange(address.host.getOrElse(throwHostMissing))
+  }
 
 }
 

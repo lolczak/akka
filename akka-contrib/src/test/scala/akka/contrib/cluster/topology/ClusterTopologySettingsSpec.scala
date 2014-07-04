@@ -43,9 +43,9 @@ class ClusterTopologySettingsSpec extends FlatSpec with Matchers with GivenWhenT
     val clusterTopology = ClusterTopology.fromConfig(config.getConfig("akka"))
     Then("I should get valid topology settings")
     clusterTopology shouldNot be(null)
-    clusterTopology.contains("1") should be(true)
-    clusterTopology.contains("2") should be(true)
-    clusterTopology.contains("3") should be(true)
+    clusterTopology.containsZone("1") should be(true)
+    clusterTopology.containsZone("2") should be(true)
+    clusterTopology.containsZone("3") should be(true)
   }
 
 }

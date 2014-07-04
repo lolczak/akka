@@ -14,15 +14,16 @@ class ClusterTopology(val topology: Map[String, Zone]) {
 
   val zones: IndexedSeq[Zone] = topology.values.toIndexedSeq
 
-  def getClosestZoneFor(zone:Zone) = topology.get(zone.proximity(0)).get
+  def getClosestZoneFor(zone: Zone) = topology.get(zone.proximity(0)).get
+
+  def containsZone(zoneId: String) = topology.contains(zoneId)
 
 }
-
 
 object ClusterTopology {
 
   def fromConfig(config: Config): ClusterTopology = {
-    val zonesConfig = immutableSeq(config.getConfigList("cluster.topology.zones"))
+    val zonesConfig = immutableSeq(config.getConfigList("cluster.topology.zones")) //todo refactor
     val zones = for (zoneConfig ← zonesConfig)
       yield Zone(
       id = zoneConfig.getString("id"),
