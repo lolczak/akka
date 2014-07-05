@@ -3,6 +3,7 @@ package akka.contrib.cluster.topology
 import com.typesafe.config.Config
 import akka.japi.Util._
 import scala.collection.immutable.IndexedSeq
+import akka.actor.Address
 
 /**
  *
@@ -10,20 +11,28 @@ import scala.collection.immutable.IndexedSeq
  * @author Lukasz Olczak
  */
 
-class ClusterTopology(val topology: Map[String, Zone]) {
+class ClusterTopology(private val topology: Map[String, Zone]) {
 
   val zones: IndexedSeq[Zone] = topology.values.toIndexedSeq
 
-  def getClosestZoneFor(zone: Zone) = topology.get(zone.proximity(0)).get
+  def getClosestZoneFor(zone: Zone): Zone = topology.get(zone.proximity(0)).get
+
+  def getZone(zoneId: String): Option[Zone] = topology.get(zoneId)
+
+  def proximityZones(selfZone: Zone): Seq[Zone] = for (zoneId ← selfZone.proximity; zone ← getZone(zoneId)) yield zone
 
   def containsZone(zoneId: String) = topology.contains(zoneId)
+
+  def findZone(predicate: Zone ⇒ Boolean): Option[Zone] = topology.values.find(predicate)
+
+  def findZone(nodeAddress: Address): Option[Zone] = findZone(_.contains(nodeAddress))
 
 }
 
 object ClusterTopology {
 
   def fromConfig(config: Config): ClusterTopology = {
-    val zonesConfig = immutableSeq(config.getConfigList("cluster.topology.zones")) //todo refactor
+    val zonesConfig = immutableSeq(config.getConfigList("zones"))
     val zones = for (zoneConfig ← zonesConfig)
       yield Zone(
       id = zoneConfig.getString("id"),

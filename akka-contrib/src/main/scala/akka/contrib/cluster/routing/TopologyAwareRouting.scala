@@ -1,7 +1,7 @@
 package akka.contrib.cluster.routing
 
 import com.typesafe.config.Config
-import akka.actor.{ SupervisorStrategy, ActorSystem, Address, DynamicAccess }
+import akka.actor._
 import akka.contrib.cluster.topology._
 import akka.cluster.Cluster
 import akka.routing._
@@ -11,48 +11,44 @@ import akka.dispatch.Dispatchers
 import akka.japi.Util._
 import akka.contrib.cluster.topology.Zone
 import akka.routing.SeveralRoutees
+import scala.Some
 import akka.routing.Router
 import akka.routing.ActorRefRoutee
 import akka.routing.ActorSelectionRoutee
+import scala.concurrent.forkjoin.ThreadLocalRandom
 
-class TopologyAwareRoutingLogic(system: ActorSystem, zoneRoutingLogic: ZoneRoutingLogic,
-                                nodeRoutingLogic: NodeRoutingLogic) extends RoutingLogic {
+case class RouteeTopology(routees: IndexedSeq[Routee], clusterTopology: ClusterTopology, selfAddress: Address) {
 
-  private val cluster = Cluster(system)
+  val selfZone: Zone = clusterTopology.findZone(selfAddress).getOrElse(throwInvalidTopology)
 
-  protected val topology: ClusterTopology = ClusterTopology.fromConfig(system.settings.config.getConfig("akka"))
+  private def throwInvalidTopology = throw new IllegalArgumentException("Wrong topology. Cannot identify my zone.")
 
-  protected val myZone: Zone = {
-    val myZoneOption = topology.zones.find(_.contains(cluster.selfAddress)) //todo refactor
-    if (myZoneOption.isEmpty) throw new IllegalArgumentException("Wrong topology. Cannot identify my zone.")
-    myZoneOption.get
-  }
+  val routeeGroupedByZone: Map[Zone, IndexedSeq[Routee]] = routees groupBy routeeZone
 
-  def select(message: Any, routees: IndexedSeq[Routee]): Routee = {
-    println(s"routees size ${routees.size}")
-    for (routee ← routees) {
-      routee match {
-        case asr: ActorSelectionRoutee ⇒ println(s"Routee: ${asr.selection.anchorPath} ${routee.getClass}")
-        case arr: ActorRefRoutee       ⇒ println(s"Routee: ${arr.ref.path} ${routee.getClass}")
-        case _                         ⇒ throw new IllegalArgumentException(s"Cannot extract address from routee")
-      }
+  val selfZoneRoutees: IndexedSeq[Routee] = {
+    routeeGroupedByZone.get(selfZone) match {
+      case None    ⇒ IndexedSeq.empty
+      case Some(r) ⇒ r
     }
-
-    val routeesTopology: Map[Zone, IndexedSeq[Routee]] = routees groupBy routeeZone
-    val destinations = for (
-      zone ← zoneRoutingLogic.selectZones(message, myZone, topology);
-      zoneRoutees = routeesTopology.get(zone).get;
-      routees ← nodeRoutingLogic.selectRoutees(message, zone, zoneRoutees)
-    ) yield routees
-    SeveralRoutees(destinations)
   }
+
+  val closestRoutees: IndexedSeq[Routee] =
+    if (selfZoneRoutees.isEmpty) {
+      val closesNonEmptyZone = clusterTopology.proximityZones(selfZone).find(
+        zone ⇒ routeeGroupedByZone.contains(zone) && !routeeGroupedByZone(zone).isEmpty)
+      closesNonEmptyZone.map(routeeGroupedByZone(_)) match {
+        case None    ⇒ IndexedSeq.empty
+        case Some(r) ⇒ r
+      }
+    } else selfZoneRoutees
 
   protected def routeeZone(routee: Routee): Zone = {
     val address = extractNodeAddress(routee)
-    val zoneOption = topology.zones.find(_.contains(address)) //todo refactor
-    if (zoneOption.isEmpty) throw new IllegalArgumentException(s"Cannot assign routee: $routee to any zone")
-    zoneOption.get
+    clusterTopology.findZone(address).getOrElse(throwCannotAssignRoutee(routee))
   }
+
+  private def throwCannotAssignRoutee(routee: Routee) =
+    throw new IllegalArgumentException(s"Cannot assign routee: $routee to any zone")
 
   protected def extractNodeAddress(routee: Routee): Address = {
     val address = routee match {
@@ -61,30 +57,45 @@ class TopologyAwareRoutingLogic(system: ActorSystem, zoneRoutingLogic: ZoneRouti
       case _                         ⇒ throw new IllegalArgumentException(s"Cannot extract address from routee")
     }
     address match {
-      case Address(_, _, None, None) ⇒ cluster.selfAddress
+      case Address(_, _, None, None) ⇒ selfAddress
       case a                         ⇒ a
     }
   }
 
 }
 
-trait ZoneRoutingLogic {
-  def selectZones(message: Any, myZone: Zone, topology: ClusterTopology): IndexedSeq[Zone]
+trait TopologyAwareRoutingLogic {
+
+  def select(message: Any, routeeTopology: RouteeTopology): IndexedSeq[Routee]
+
 }
 
-object ZoneRoutingLogic {
+class TopologyAwareRoutingLogicAdapter(system: ActorSystem, adaptee: TopologyAwareRoutingLogic)
+  extends RoutingLogic with NoSerializationVerificationNeeded {
 
-  def fromConfig(config: Config, dynamicAccess: DynamicAccess): ZoneRoutingLogic =
-    config.getString("zone-routing-logic") match {
-      case "closest-zone" ⇒ ClosestZoneRoutingLogic
-      case "my-zone"      ⇒ MyZoneRoutingLogic
+  private val cluster = Cluster(system)
+
+  protected val topology: ClusterTopology = ClusterTopology.fromConfig(system.settings.config.getConfig("akka.cluster.topology"))
+
+  def select(message: Any, routees: IndexedSeq[Routee]): Routee = {
+    val destinations = adaptee.select(message, RouteeTopology(routees, topology, cluster.selfAddress))
+    SeveralRoutees(destinations)
+  }
+
+}
+
+object TopologyAwareRoutingLogic {
+
+  def fromConfig(config: Config, dynamicAccess: DynamicAccess): TopologyAwareRoutingLogic =
+    config.getString("routing-logic") match {
+      case "random-closest" ⇒ ClosestRouteeRoutingLogic
       case fqn ⇒
         val args = List(classOf[Config] -> config)
-        dynamicAccess.createInstanceFor[ZoneRoutingLogic](fqn, args).recover(
+        dynamicAccess.createInstanceFor[TopologyAwareRoutingLogic](fqn, args).recover(
           {
             case exception ⇒ throw new IllegalArgumentException(
               (s"Cannot instantiate routing-logic [$fqn], " +
-                "make sure it extends [akka.contrib.cluster.routing.ZoneRoutingLogic] and " +
+                "make sure it extends [akka.contrib.cluster.routing.TopologyAwareRoutingLogic] and " +
                 "has constructor with [com.typesafe.config.Config] parameter"), exception)
           }).get
 
@@ -92,82 +103,62 @@ object ZoneRoutingLogic {
 
 }
 
-object MyZoneRoutingLogic extends ZoneRoutingLogic {
-  def selectZones(message: Any, myZone: Zone, topology: ClusterTopology): IndexedSeq[Zone] = IndexedSeq(myZone)
+object ClosestRouteeRoutingLogic extends TopologyAwareRoutingLogic {
+
+  def chooseRandom(routees: IndexedSeq[Routee]): IndexedSeq[Routee] =
+    if (routees.isEmpty) IndexedSeq.empty
+    else IndexedSeq(routees(ThreadLocalRandom.current.nextInt(routees.size)))
+
+  def select(message: Any, topology: RouteeTopology): IndexedSeq[Routee] = chooseRandom(topology.closestRoutees)
+
 }
 
-object ClosestZoneRoutingLogic extends ZoneRoutingLogic {
-  def selectZones(message: Any, myZone: Zone, topology: ClusterTopology): IndexedSeq[Zone] =
-    IndexedSeq(topology.getClosestZoneFor(myZone))
-}
-
-trait NodeRoutingLogic {
-  def selectRoutees(message: Any, zone: Zone, routees: IndexedSeq[Routee]): IndexedSeq[Routee]
-}
-
-private class NodeRoutingLogicAdapter(val adaptee: RoutingLogic) extends NodeRoutingLogic {
-  def selectRoutees(message: Any, zone: Zone, routees: IndexedSeq[Routee]): IndexedSeq[Routee] =
-    IndexedSeq(adaptee.select(message, routees))
-}
-
-object NodeRoutingLogic {
-  def fromConfig(config: Config, dynamicAccess: DynamicAccess): NodeRoutingLogic =
-    config.getString("node-routing-logic") match {
-      //      case "round-robin" => MyZoneRoutingLogic
-      case "random"           ⇒ new NodeRoutingLogicAdapter(RandomRoutingLogic())
-      case "broadcast"        ⇒ new NodeRoutingLogicAdapter(BroadcastRoutingLogic())
-      case "smallest-mailbox" ⇒ new NodeRoutingLogicAdapter(SmallestMailboxRoutingLogic())
-      case fqn ⇒
-        val args = List(classOf[Config] -> config)
-        dynamicAccess.createInstanceFor[NodeRoutingLogic](fqn, args).recover(
-          {
-            case exception ⇒ throw new IllegalArgumentException(
-              (s"Cannot instantiate routing-logic [$fqn], " +
-                "make sure it extends [akka.contrib.cluster.routing.ZoneRoutingLogic] and " +
-                "has constructor with [com.typesafe.config.Config] parameter"), exception)
-          }).get
-
-    }
+object SelfZoneRouteeRoutingLogic extends TopologyAwareRoutingLogic {
+  def select(message: Any, topology: RouteeTopology): IndexedSeq[Routee] = topology.selfZoneRoutees
 }
 
 class TopologyAwareRoutingPool(
-  zoneRoutingLogic: ZoneRoutingLogic, nodeRoutingLogic: NodeRoutingLogic,
+  topologyAwareRoutingLogic: TopologyAwareRoutingLogic,
   override val nrOfInstances: Int = 0,
   override val supervisorStrategy: SupervisorStrategy = Pool.defaultSupervisorStrategy,
   override val routerDispatcher: String = Dispatchers.DefaultDispatcherId,
   override val usePoolDispatcher: Boolean = false)
-
   extends Pool {
 
   def this(config: Config, dynamicAccess: DynamicAccess) =
     this(
-      ZoneRoutingLogic.fromConfig(config, dynamicAccess),
-      NodeRoutingLogic.fromConfig(config, dynamicAccess),
+      TopologyAwareRoutingLogic.fromConfig(config, dynamicAccess),
       config.getInt("nr-of-instances"),
       Pool.defaultSupervisorStrategy,
       Dispatchers.DefaultDispatcherId,
       config.hasPath("pool-dispatcher"))
 
   def createRouter(system: ActorSystem): Router =
-    new Router(new TopologyAwareRoutingLogic(system, zoneRoutingLogic, nodeRoutingLogic))
+    new Router(new TopologyAwareRoutingLogicAdapter(system, topologyAwareRoutingLogic))
 
   def resizer: Option[Resizer] = None
 
 }
 
 final case class TopologyAwareRoutingGroup(
-  zoneRoutingLogic: ZoneRoutingLogic, nodeRoutingLogic: NodeRoutingLogic,
+  topologyAwareRoutingLogic: TopologyAwareRoutingLogic,
   override val paths: immutable.Iterable[String] = Nil,
   override val routerDispatcher: String = Dispatchers.DefaultDispatcherId)
   extends Group {
 
   def this(config: Config, dynamicAccess: DynamicAccess) =
     this(
-      ZoneRoutingLogic.fromConfig(config, dynamicAccess),
-      NodeRoutingLogic.fromConfig(config, dynamicAccess),
+      TopologyAwareRoutingLogic.fromConfig(config, dynamicAccess),
       immutableSeq(config.getStringList("routees.paths")))
 
   def createRouter(system: ActorSystem): Router =
-    new Router(new TopologyAwareRoutingLogic(system, zoneRoutingLogic, nodeRoutingLogic))
+    new Router(new TopologyAwareRoutingLogicAdapter(system, topologyAwareRoutingLogic))
+
+}
+
+class ReplicationRoutingLogic(globalReplicationFactor: Int, zoneReplicationFactor: Map[String, Int])
+  extends TopologyAwareRoutingLogic {
+
+  def select(message: Any, routeeTopology: RouteeTopology): IndexedSeq[Routee] = ???
 
 }

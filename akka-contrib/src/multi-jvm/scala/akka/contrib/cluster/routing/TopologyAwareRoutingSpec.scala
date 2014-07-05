@@ -1,22 +1,30 @@
-package akka.contrib.cluster.topology
+package akka.contrib.cluster.routing
 
-import akka.remote.testkit.{ STMultiNodeSpec, MultiNodeSpec, MultiNodeConfig }
+import akka.remote.testkit.{ STMultiNodeSpec, MultiNodeConfig }
 import com.typesafe.config.ConfigFactory
 import akka.cluster.Cluster
-import akka.remote.testconductor.RoleName
-import akka.testkit.{ TestProbe, DefaultTimeout, LongRunningTest, ImplicitSender }
-import akka.actor.{ ActorRef, Props, Actor, Address }
-import akka.routing.{ GetRoutees, Routees, RoutedActorRef, FromConfig }
-import akka.cluster.ClusterEvent.{ CurrentClusterState, MemberUp }
+import akka.testkit.{ DefaultTimeout, LongRunningTest, ImplicitSender }
+import akka.routing.{ GetRoutees, RoutedActorRef }
 import scala.concurrent.Await
 import akka.pattern.ask
+import akka.actor.Actor
+import akka.actor.Address
+import akka.remote.testkit.MultiNodeSpec
+import akka.routing.FromConfig
+import akka.actor.Props
+import akka.remote.testconductor.RoleName
+import akka.testkit.TestProbe
+import akka.cluster.ClusterEvent.MemberUp
+import akka.actor.ActorRef
+import akka.routing.Routees
+import akka.cluster.ClusterEvent.CurrentClusterState
 
 /**
  *
  *
  * @author Lukasz Olczak
  */
-object ClusterTopologyAwareRoutingSpec extends MultiNodeConfig {
+object TopologyAwareRoutingSpec extends MultiNodeConfig {
 
   val MessageCount = 10
 
@@ -62,23 +70,25 @@ object ClusterTopologyAwareRoutingSpec extends MultiNodeConfig {
         |     deployment {
         |       /router1 {
         |         router = topology-aware-pool
-        |         zone-routing-logic = closest-zone
-        |         node-routing-logic = random
+        |         routing-logic = random-closest
         |         nr-of-instances = 6
         |         cluster {
         |           enabled = on
         |           max-nr-of-instances-per-node = 1
-        |           allow-local-routees = on
+        |           allow-local-routees = off
         |         }
         |       }
         |       /router2 {
         |         router = topology-aware-group
-        |         zone-routing-logic = closest-zone
-        |         node-routing-logic = broadcast
+        |         routing-logic = random-closest
         |         nr-of-instances = 10
         |         routees.paths = [ "/user/service" ]
-        |         cluster.enabled = on
-        |         cluster.allow-local-routees = on
+        |         cluster {
+        |           enabled = on
+        |           max-nr-of-instances-per-node = 1
+        |           allow-local-routees = off
+        |           use-role = service
+        |         }
         |       }
         |     }
         |   }
@@ -121,16 +131,32 @@ object ClusterTopologyAwareRoutingSpec extends MultiNodeConfig {
       """.stripMargin))
 
   nodeConfig(zone1.node1) {
-    ConfigFactory.parseString("""akka.remote.netty.tcp.hostname = "127.1.0.1" """)
+    ConfigFactory.parseString(
+      """
+        |akka.remote.netty.tcp.hostname = "127.1.0.1"
+        |akka.cluster.roles =["service"]
+      """.stripMargin)
   }
   nodeConfig(zone1.node2) {
-    ConfigFactory.parseString("""akka.remote.netty.tcp.hostname = "127.1.0.2" """)
+    ConfigFactory.parseString(
+      """
+        |akka.remote.netty.tcp.hostname = "127.1.0.2"
+        |akka.cluster.roles =["service"]
+      """.stripMargin)
   }
   nodeConfig(zone2.node1) {
-    ConfigFactory.parseString("""akka.remote.netty.tcp.hostname = "127.2.0.1" """)
+    ConfigFactory.parseString(
+      """
+        |akka.remote.netty.tcp.hostname = "127.2.0.1"
+        |akka.cluster.roles =["service"]
+      """.stripMargin)
   }
   nodeConfig(zone2.node2) {
-    ConfigFactory.parseString("""akka.remote.netty.tcp.hostname = "127.2.0.2" """)
+    ConfigFactory.parseString(
+      """
+        |akka.remote.netty.tcp.hostname = "127.2.0.2"
+        |akka.cluster.roles =["service"]
+      """.stripMargin)
   }
   nodeConfig(zone3.node1) {
     ConfigFactory.parseString("""akka.remote.netty.tcp.hostname = "127.3.0.1" """)
@@ -138,25 +164,21 @@ object ClusterTopologyAwareRoutingSpec extends MultiNodeConfig {
   nodeConfig(zone3.node2) {
     ConfigFactory.parseString("""akka.remote.netty.tcp.hostname = "127.3.0.2" """)
   }
+
 }
 
-class ClusterTopologyAwareRoutingMultiJvmZone1Node1 extends ClusterTopologyAwareRoutingSpec
+class TopologyAwareRoutingMultiJvmZone1Node1 extends TopologyAwareRoutingSpec
+class TopologyAwareRoutingMultiJvmZone1Node2 extends TopologyAwareRoutingSpec
+class TopologyAwareRoutingMultiJvmZone2Node1 extends TopologyAwareRoutingSpec
+class TopologyAwareRoutingMultiJvmZone2Node2 extends TopologyAwareRoutingSpec
+class TopologyAwareRoutingMultiJvmZone3Node1 extends TopologyAwareRoutingSpec
+class TopologyAwareRoutingMultiJvmZone3Node2 extends TopologyAwareRoutingSpec
 
-class ClusterTopologyAwareRoutingMultiJvmZone1Node2 extends ClusterTopologyAwareRoutingSpec
-
-class ClusterTopologyAwareRoutingMultiJvmZone2Node1 extends ClusterTopologyAwareRoutingSpec
-
-class ClusterTopologyAwareRoutingMultiJvmZone2Node2 extends ClusterTopologyAwareRoutingSpec
-
-class ClusterTopologyAwareRoutingMultiJvmZone3Node1 extends ClusterTopologyAwareRoutingSpec
-
-class ClusterTopologyAwareRoutingMultiJvmZone3Node2 extends ClusterTopologyAwareRoutingSpec
-
-class ClusterTopologyAwareRoutingSpec extends MultiNodeSpec(ClusterTopologyAwareRoutingSpec)
+class TopologyAwareRoutingSpec extends MultiNodeSpec(TopologyAwareRoutingSpec)
   with STMultiNodeSpec with ImplicitSender with DefaultTimeout {
 
   import scala.concurrent.duration._
-  import ClusterTopologyAwareRoutingSpec._
+  import TopologyAwareRoutingSpec._
 
   override def initialParticipants = roles.size
 
@@ -225,33 +247,36 @@ class ClusterTopologyAwareRoutingSpec extends MultiNodeSpec(ClusterTopologyAware
       runOn(zone1.node1) {
         router1.isInstanceOf[RoutedActorRef] should be(true)
 
-        awaitAssert(currentRoutees(router1).size should be(6))
+        awaitAssert(currentRoutees(router1).size should be(5))
 
         (1 to MessageCount).foreach(i ⇒ router1 ! s"hit $i")
 
         val replies = receiveReplies(MessageCount)
         replies(zone1.node1) should be(0)
-        replies(zone1.node2) should be(0)
+        replies(zone1.node2) should be(MessageCount)
         replies(zone2.node1) should be(0)
         replies(zone2.node2) should be(0)
-        replies(zone3.node1) + replies(zone3.node2) should be(MessageCount)
+        replies(zone3.node1) should be(0)
+        replies(zone3.node2) should be(0)
       }
       enterBarrier("after-2")
     }
 
     "lookup routees on the member nodes in the cluster" taggedAs LongRunningTest in {
-      system.actorOf(Props(classOf[Echo]), "service")
+      runOn(zone2.node2, zone2.node1, zone1.node2, zone1.node1) {
+        system.actorOf(Props(classOf[Echo]), "service")
+      }
       enterBarrier("service-started")
+
       runOn(zone3.node2) {
-        awaitAssert(currentRoutees(router2).size should be(6))
+        awaitAssert(currentRoutees(router2).size should be(4))
 
         (1 to MessageCount).foreach(i ⇒ router2 ! s"hit $i")
 
-        val replies = receiveReplies(2 * MessageCount)
+        val replies = receiveReplies(MessageCount)
         replies(zone1.node1) should be(0)
         replies(zone1.node2) should be(0)
-        replies(zone2.node1) should be(MessageCount)
-        replies(zone2.node2) should be(MessageCount)
+        replies(zone2.node1) + replies(zone2.node2) should be(MessageCount)
         replies(zone3.node1) should be(0)
         replies(zone3.node2) should be(0)
       }
@@ -260,3 +285,4 @@ class ClusterTopologyAwareRoutingSpec extends MultiNodeSpec(ClusterTopologyAware
 
   }
 }
+
