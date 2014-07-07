@@ -4,6 +4,7 @@ import akka.testkit.AkkaSpec
 import akka.contrib.cluster.topology.ClusterTopology
 import com.typesafe.config.ConfigFactory
 import akka.routing.ActorSelectionRoutee
+import org.scalatest.mock.MockitoSugar
 
 /**
  *
@@ -43,7 +44,7 @@ object RouteeTopologySpec {
 
 }
 
-class RouteeTopologySpec extends AkkaSpec {
+class RouteeTopologySpec extends AkkaSpec with MockitoSugar {
   //
   //  val sampleRoutees = IndexedSeq(
   //    ActorSelectionRoutee(system.actorSelection("akka://system@host:port"))
