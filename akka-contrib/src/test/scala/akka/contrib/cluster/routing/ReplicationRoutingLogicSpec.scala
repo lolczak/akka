@@ -61,6 +61,8 @@ object ReplicationRoutingLogicSpec extends MockitoSugar {
 
   val Zone3Node2Routee = testRoutee("127.3.0.2")
 
+  val TestRoutees = IndexedSeq(Zone1Node1Routee, Zone1Node2Routee, Zone2Node1Routee, Zone2Node2Routee, Zone3Node1Routee, Zone3Node2Routee)
+
   def testRoutee(host: String): Routee = {
     val address = Address("akka", "testSystem", host, 12)
     val actorSelection = mock[ActorSelection]
@@ -79,11 +81,11 @@ class ReplicationRoutingLogicSpec extends AkkaSpec with MockitoSugar {
 
   "A replication routing logic" must {
 
-    val testRoutees = IndexedSeq(Zone1Node1Routee, Zone1Node2Routee, Zone2Node1Routee, Zone2Node2Routee, Zone3Node1Routee, Zone3Node2Routee)
+
 
     "select number of routees equal to global replication routing logic" in {
       val replicationLogic = ReplicationRoutingLogic(3, None)
-      val topology = RouteeTopology(testRoutees, SampleClusterTopology, SelfAddress)
+      val topology = RouteeTopology(TestRoutees, SampleClusterTopology, SelfAddress)
       val selectedRoutees = replicationLogic.select(mock[AnyRef], topology)
       selectedRoutees.size should be(3)
     }
@@ -99,23 +101,33 @@ class ReplicationRoutingLogicSpec extends AkkaSpec with MockitoSugar {
     "select routees from each zone such that it satisfies the zone replication factor criteria " in {
       val replicationLogic = ReplicationRoutingLogic(3, Some(Map("zone1" -> 2, "zone2" -> 1, "zone3" -> 0)))
 
-      val topology = RouteeTopology(testRoutees, SampleClusterTopology, SelfAddress)
+      val topology = RouteeTopology(TestRoutees, SampleClusterTopology, SelfAddress)
       val selectedRoutees = replicationLogic.select(mock[AnyRef], topology)
 
       selectedRoutees should (
         contain(Zone1Node1Routee) and
         contain(Zone1Node2Routee) and
         contain oneOf(Zone2Node1Routee, Zone2Node2Routee) and
-        have size (3)
-        )
+        have size (3))
     }
 
     "throw IllegalArgumentException if a global replication factor is not equal to a sum of zone replication factors" in {
+      intercept[IllegalArgumentException] {
+        ReplicationRoutingLogic(5, Some(Map("zone1" -> 2, "zone2" -> 1, "zone3" -> 0)))
+      }
 
+      intercept[IllegalArgumentException] {
+        ReplicationRoutingLogic(1, Some(Map("zone1" -> 2, "zone2" -> 1, "zone3" -> 0)))
+      }
     }
 
     "throw IllegalArgumentException if a number of routees is lesser than zone replication factor" in {
+      intercept[IllegalArgumentException] {
+        val replicationLogic = ReplicationRoutingLogic(3, Some(Map("zone1" -> 3, "zone2" -> 0, "zone3" -> 0)))
 
+        val topology = RouteeTopology(TestRoutees, SampleClusterTopology, SelfAddress)
+        replicationLogic.select(mock[AnyRef], topology)
+      }
     }
 
   }

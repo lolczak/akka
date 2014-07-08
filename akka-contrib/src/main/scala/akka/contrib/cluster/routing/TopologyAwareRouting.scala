@@ -25,7 +25,7 @@ case class RouteeTopology(routees: IndexedSeq[Routee], clusterTopology: ClusterT
 
   val selfZone: Zone = clusterTopology.findZone(selfAddress).getOrElse(throwInvalidTopology)
 
-  private def throwInvalidTopology = throw new IllegalArgumentException("Wrong topology. Cannot identify my zone.")
+  private def throwInvalidTopology = throw new IllegalArgumentException("Wrong topology. Cannot identify self zone.")
 
   private val routeeGroupedByZone: Map[Zone, IndexedSeq[Routee]] = routees groupBy routeeZone
 
@@ -177,36 +177,42 @@ case class ReplicationRoutingLogic(
                                     private val zoneReplicationFactors: Option[Map[String, Int]])
   extends TopologyAwareRoutingLogic {
 
-  //todo validation globalReplicationFactor <-> zoneReplicationFactors
+  if (globalReplicationFactor <= 0) throw new IllegalArgumentException("Global replication factor must be > 0")
+
+  if (globalReplicationFactor != sumOfZoneReplicationFactors)
+    throw new IllegalArgumentException("Global replication factor must be equal to sum of zone replication factors")
+
+  lazy val sumOfZoneReplicationFactors =  zoneReplicationFactors match {
+      case None => globalReplicationFactor
+      case Some(factors) => factors.values.reduce(_ + _)
+    }
 
   private def draw(count: Int, routees: IndexedSeq[Routee]): IndexedSeq[Routee] = Random.shuffle(routees).take(count) //todo validation
 
   def select(message: Any, routeeTopology: RouteeTopology): IndexedSeq[Routee] = {
     if (routeeTopology.allRoutees.size < globalReplicationFactor)
-      throw new IllegalArgumentException("Number of routees lesser than global replication factor")
+      throw new IllegalArgumentException("Number of routees [${routeeTopology.allRoutees.size}] is lesser than global " +
+        "replication factor [$globalReplicationFactor]")
+
     zoneReplicationFactors match {
       case None => draw(globalReplicationFactor, routeeTopology.allRoutees) //todo implicit conversion
       case Some(factors) => selectTopologyAwareRoutee(routeeTopology)
     }
   }
 
-
   protected def selectTopologyAwareRoutee(topology: RouteeTopology): IndexedSeq[Routee] = {
-    val list = new ListBuffer[Routee]
+    val result = new ListBuffer[Routee]
     for ((zoneId, zoneReplicationFactor) <- zoneReplicationFactors.get) {
       val zoneRoutees = topology.getRouteesForZone(zoneId)
+      if (zoneRoutees.size < zoneReplicationFactor)
+        throw new IllegalArgumentException(s"Number of zone routees [${zoneRoutees.size}}] is lesser than zone " +
+          s"replication factor [$zoneReplicationFactor]")
+
       val selected = draw(zoneReplicationFactor, zoneRoutees)
 
-      list appendAll selected
+      result appendAll selected
     }
-    list.toIndexedSeq
-
-
-//    for {
-//      (zoneId, zoneReplicationFactor) <- zoneReplicationFactors.get
-//      zoneRoutees = topology.getRouteesForZone(zoneId)
-//      zoneRoutee <- draw(zoneReplicationFactor, zoneRoutees)
-//    } yield zoneRoutee
+    result.toIndexedSeq
   }
 
 }
