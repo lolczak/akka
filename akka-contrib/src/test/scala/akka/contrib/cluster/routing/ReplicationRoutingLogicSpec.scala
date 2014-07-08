@@ -2,8 +2,8 @@ package akka.contrib.cluster.routing
 
 import akka.testkit.AkkaSpec
 import org.scalatest.mock.MockitoSugar
-import akka.routing.{ActorSelectionRoutee, Routee}
-import akka.actor.{Address, ActorPath, ActorSelection}
+import akka.routing.{ ActorSelectionRoutee, Routee }
+import akka.actor.{ Address, ActorPath, ActorSelection }
 import org.mockito.Mockito._
 import akka.contrib.cluster.topology.ClusterTopology
 import com.typesafe.config.ConfigFactory
@@ -15,7 +15,6 @@ import java.lang.IllegalArgumentException
  *
  * @author Lukasz Olczak
  */
-
 
 object ReplicationRoutingLogicSpec extends MockitoSugar {
 
@@ -78,14 +77,11 @@ class ReplicationRoutingLogicSpec extends AkkaSpec with MockitoSugar {
 
   import ReplicationRoutingLogicSpec._
 
-
   "A replication routing logic" must {
-
-
 
     "select number of routees equal to global replication routing logic" in {
       val replicationLogic = ReplicationRoutingLogic(3, None)
-      val topology = RouteeTopology(TestRoutees, SampleClusterTopology, SelfAddress)
+      val topology = new TopologyAwareRouteesImpl(TestRoutees, SampleClusterTopology, SelfAddress)
       val selectedRoutees = replicationLogic.select(mock[AnyRef], topology)
       selectedRoutees.size should be(3)
     }
@@ -93,7 +89,7 @@ class ReplicationRoutingLogicSpec extends AkkaSpec with MockitoSugar {
     "throw IllegalArgumentException if a number of routees is lesser than global replication factor" in {
       intercept[IllegalArgumentException] {
         val replicationLogic = ReplicationRoutingLogic(3, None)
-        val topology = RouteeTopology(IndexedSeq.empty, SampleClusterTopology, SelfAddress)
+        val topology = new TopologyAwareRouteesImpl(IndexedSeq.empty, SampleClusterTopology, SelfAddress)
         replicationLogic.select(mock[AnyRef], topology)
       }
     }
@@ -101,13 +97,13 @@ class ReplicationRoutingLogicSpec extends AkkaSpec with MockitoSugar {
     "select routees from each zone such that it satisfies the zone replication factor criteria " in {
       val replicationLogic = ReplicationRoutingLogic(3, Some(Map("zone1" -> 2, "zone2" -> 1, "zone3" -> 0)))
 
-      val topology = RouteeTopology(TestRoutees, SampleClusterTopology, SelfAddress)
+      val topology = new TopologyAwareRouteesImpl(TestRoutees, SampleClusterTopology, SelfAddress)
       val selectedRoutees = replicationLogic.select(mock[AnyRef], topology)
 
       selectedRoutees should (
         contain(Zone1Node1Routee) and
         contain(Zone1Node2Routee) and
-        contain oneOf(Zone2Node1Routee, Zone2Node2Routee) and
+        contain oneOf (Zone2Node1Routee, Zone2Node2Routee) and
         have size (3))
     }
 
@@ -125,12 +121,11 @@ class ReplicationRoutingLogicSpec extends AkkaSpec with MockitoSugar {
       intercept[IllegalArgumentException] {
         val replicationLogic = ReplicationRoutingLogic(3, Some(Map("zone1" -> 3, "zone2" -> 0, "zone3" -> 0)))
 
-        val topology = RouteeTopology(TestRoutees, SampleClusterTopology, SelfAddress)
+        val topology = new TopologyAwareRouteesImpl(TestRoutees, SampleClusterTopology, SelfAddress)
         replicationLogic.select(mock[AnyRef], topology)
       }
     }
 
   }
-
 
 }
