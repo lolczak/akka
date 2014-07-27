@@ -248,7 +248,7 @@ case class ReplicationRoutingLogic(
 private object TopologyAwareRoutingImplicits {
 
   implicit def wrapCollection[T, CC[X] <: TraversableLike[X, CC[X]]](xs: CC[T])(implicit bf: CanBuildFrom[CC[T], T, CC[T]]): CollectionHelper[T, CC] =
-    new CollectionHelper[T, CC](xs)(bf)
+    new CollectionHelper[T, CC](xs)
 
 }
 
@@ -258,7 +258,7 @@ private class CollectionHelper[T, CC[X] <: TraversableLike[X, CC[X]]](xs: CC[T])
     require(!xs.isEmpty)
     require(count >= 0)
     require(count <= xs.size)
-    val shuffled = new Random(ThreadLocalRandom.current).shuffle(xs)(bf)
+    val shuffled = new Random(ThreadLocalRandom.current).shuffle(xs)
     shuffled.take(count)
   }
 
