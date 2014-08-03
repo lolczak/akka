@@ -1,14 +1,14 @@
 package akka.contrib.cluster.topology
 
-import org.scalatest.{ GivenWhenThen, Matchers, FlatSpec }
 import com.typesafe.config.ConfigFactory
+import akka.testkit.AkkaSpec
 
 /**
  *
  *
  * @author Lukasz Olczak
  */
-class ClusterTopologySettingsSpec extends FlatSpec with Matchers with GivenWhenThen {
+object ClusterTopologySpec {
 
   val topologyConfig =
     """
@@ -36,16 +36,21 @@ class ClusterTopologySettingsSpec extends FlatSpec with Matchers with GivenWhenT
       |}
     """.stripMargin
 
-  "A ClusterTopologySettings" should "parse topology configuration" in {
-    Given("Valid config containing topology")
-    val config = ConfigFactory.parseString(topologyConfig)
-    When("I parse topology config")
-    val clusterTopology = ClusterTopology.fromConfig(config.getConfig("akka"))
-    Then("I should get valid topology settings")
-    clusterTopology shouldNot be(null)
-    clusterTopology.containsZone("1") should be(true)
-    clusterTopology.containsZone("2") should be(true)
-    clusterTopology.containsZone("3") should be(true)
-  }
+}
 
+class ClusterTopologySpec extends AkkaSpec {
+
+  import ClusterTopologySpec._
+
+  "A ClusterTopologySettings" must {
+
+    "parse topology configuration" in {
+      val config = ConfigFactory.parseString(topologyConfig)
+      val clusterTopology = ClusterTopology.fromConfig(config.getConfig("akka"))
+      clusterTopology shouldNot be(null)
+      clusterTopology.containsZone("1") should be(true)
+      clusterTopology.containsZone("2") should be(true)
+      clusterTopology.containsZone("3") should be(true)
+    }
+  }
 }
