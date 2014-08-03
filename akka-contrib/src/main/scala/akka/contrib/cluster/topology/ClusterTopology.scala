@@ -10,16 +10,15 @@ import akka.actor.Address
  *
  * @author Lukasz Olczak
  */
-
 class ClusterTopology(private val topology: Map[String, Zone]) {
 
   val zones: IndexedSeq[Zone] = topology.values.toIndexedSeq
 
   def getClosestZoneFor(zone: Zone): Zone = topology.get(zone.proximity(0)).get
 
-  def getZone(zoneId: String): Option[Zone] = topology.get(zoneId)
+  def findZone(zoneId: String): Option[Zone] = topology.get(zoneId)
 
-  def proximityZones(selfZone: Zone): Seq[Zone] = for (zoneId ← selfZone.proximity; zone ← getZone(zoneId)) yield zone
+  def getProximityZonesFor(selfZone: Zone): Seq[Zone] = for (zoneId ← selfZone.proximity; zone ← findZone(zoneId)) yield zone
 
   def containsZone(zoneId: String) = topology.contains(zoneId)
 
@@ -42,6 +41,12 @@ object ClusterTopology {
     val topology = zones.map(zone ⇒ zone.id -> zone).toMap
     new ClusterTopology(topology)
   }
+
+}
+
+case class Zone(id: String, addressClassifier: AddressClassifier, proximity: Seq[String]) {
+
+  def contains(address: Address): Boolean = addressClassifier(address)
 
 }
 

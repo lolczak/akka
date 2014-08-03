@@ -64,7 +64,7 @@ private[cluster] class TopologyAwareRouteesImpl(
   val asMap: Map[Zone, IndexedSeq[Routee]] = routees groupBy routeeZone
 
   def fromZone(zoneId: String): IndexedSeq[Routee] = {
-    val zone = clusterTopology.getZone(zoneId)
+    val zone = clusterTopology.findZone(zoneId)
     zone.flatMap(asMap.get(_)).getOrElse(IndexedSeq.empty)
   }
 
@@ -78,7 +78,7 @@ private[cluster] class TopologyAwareRouteesImpl(
   val fromClosestZone: IndexedSeq[Routee] =
     if (fromSelfZone.isEmpty) {
       //todo tailrec or collectFirst
-      val closesNonEmptyZone = clusterTopology.proximityZones(selfZone).find(
+      val closesNonEmptyZone = clusterTopology.getProximityZonesFor(selfZone).find(
         zone ⇒ asMap.contains(zone) && !asMap(zone).isEmpty)
       closesNonEmptyZone.map(asMap(_)) match {
         case None    ⇒ IndexedSeq.empty

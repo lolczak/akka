@@ -2,6 +2,8 @@ package akka.contrib.cluster.topology
 
 import akka.actor.Address
 import org.apache.commons.net.util.SubnetUtils
+import akka.ConfigurationException
+import scala.util.{Failure, Success, Try}
 
 /**
  *
@@ -18,7 +20,7 @@ object AddressClassifier {
     pattern match {
       case NetMaskPattern(netmask) ⇒ NetMaskClassifier(netmask)
       case RegExPattern(regEx)     ⇒ RegExClassifier(regEx)
-      case _                       ⇒ throw new IllegalArgumentException(s"address pattern $pattern is not valid")
+      case _                       ⇒ throw new ConfigurationException(s"Address classifier [$pattern] is invalid")
     }
   }
 
@@ -30,7 +32,10 @@ case class NetMaskClassifier(pattern: String) extends AddressClassifier {
 
   import AddressClassifier._
 
-  private val cidrPattern = new SubnetUtils(pattern).getInfo
+  private val cidrPattern = Try(new SubnetUtils(pattern).getInfo) match {
+    case Success(cidrPattern) => cidrPattern
+    case Failure(cause) => throw new ConfigurationException(s"Address classifier [$pattern] is invalid", cause)
+  }
 
   def apply(address: Address): Boolean = cidrPattern.isInRange(address.host.getOrElse(throwHostMissing))
 

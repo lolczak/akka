@@ -1,16 +1,18 @@
 package akka.contrib.cluster.topology
 
-import org.scalatest.{ Matchers, WordSpec }
 import org.scalatest.prop.TableDrivenPropertyChecks._
+import akka.ConfigurationException
+import akka.testkit.AkkaSpec
+
 
 /**
  *
  *
  * @author Lukasz Olczak
  */
-class AddressClassifierSpec extends WordSpec with Matchers {
+object AddressClassifierSpec {
 
-  val invalidPatterns = Table(
+  val InvalidPatterns = Table(
     "",
     "dns:dgsdg",
     "network:dsgsdgs",
@@ -24,7 +26,7 @@ class AddressClassifierSpec extends WordSpec with Matchers {
     "net:192.168.0.0/16net:",
     "[a-z]*dev.some.org")
 
-  val validNetMaskPatterns = Table(
+  val ValidNetMaskPatterns = Table(
     "net:192.168.0.0/16",
     "net:192.168.0.0/16",
     "net:192.168.0.0/8",
@@ -32,32 +34,38 @@ class AddressClassifierSpec extends WordSpec with Matchers {
     "net:1.0.0.0/1",
     "net:192.168.0.0/1")
 
-  val validRegExPatterns = Table(
+  val ValidRegExPatterns = Table(
     "reg-ex:[a-z]*dev\\.domain\\.org",
     "reg-ex:[a-z]*\\.1\\.datacenter1\\.domain\\.org",
     "reg-ex:[a-z]*dev\\.some\\.org")
 
+}
+
+class AddressClassifierSpec extends AkkaSpec {
+
+  import AddressClassifierSpec._
+
   "An AddressClassifier" must {
 
     "throw exception upon malformed address pattern" in {
-      forAll(invalidPatterns) {
+      forAll(InvalidPatterns) {
         pattern ⇒
-          intercept[IllegalArgumentException] {
+          intercept[ConfigurationException] {
             AddressClassifier.fromString(pattern)
           }
       }
     }
 
-    "support parsing netmask pattern" in {
-      forAll(validNetMaskPatterns) {
+    "be able to parse a netmask pattern" in {
+      forAll(ValidNetMaskPatterns) {
         pattern ⇒
           val addressClassifier = AddressClassifier.fromString(pattern)
           addressClassifier shouldNot be(null)
       }
     }
 
-    "support parsing reg ex pattern" in {
-      forAll(validRegExPatterns) {
+    "be able to parse a reg ex pattern" in {
+      forAll(ValidRegExPatterns) {
         pattern ⇒
           val addressClassifier = AddressClassifier.fromString(pattern)
           addressClassifier shouldNot be(null)
